@@ -7,10 +7,13 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert} from 'react-native';
+  Alert,
+  FlatList,
+  TouchableHighlight} from 'react-native';
 import db from '../config';
 import firebase from 'firebase';
 import MyHeader from '../components/MyHeader'
+import {BookSearch} from 'react-native-google-books';
 
 export default class BookRequestScreen extends Component{
   constructor(){
@@ -24,7 +27,10 @@ export default class BookRequestScreen extends Component{
       bookStatus:"",
       requestId:"",
       userDocId: '',
-      docId :''
+      docId :'',
+      showFlatlist: false,
+      dataSource: "",
+      imageLink: ""
     }
   }
 
@@ -37,13 +43,15 @@ export default class BookRequestScreen extends Component{
   addRequest = async (bookName,reasonToRequest)=>{
     var userId = this.state.userId
     var randomRequestId = this.createUniqueId()
+    var books = await BookSearch.searchBook(bookName, "AIzaSyAFFnczSv2ybYNhk04w25TD72Cf8CyFk7A");
     db.collection('requested_books').add({
         "user_id": userId,
         "book_name":bookName,
         "reason_to_request":reasonToRequest,
         "request_id"  : randomRequestId,
         "book_status" : "requested",
-         "date"       : firebase.firestore.FieldValue.serverTimestamp()
+        "date"       : firebase.firestore.FieldValue.serverTimestamp(),
+        "image_link": books.data[0].volumeInfo.imageLinks.smallThumbnail
 
     })
 
@@ -180,7 +188,41 @@ updateBookRequestStatus=()=>{
 
 
 }
+ getBooksFromApi = async(bookName) => {
+   this.setState({
+     bookName: bookName
+   })
+   if(bookName.length > 2) {
+     var books = await BookSearch.searchBook(bookName, "AIzaSyAFFnczSv2ybYNhk04w25TD72Cf8CyFk7A");
+     this.setState({
+       showFlatlist: true,
+       dataSource: books.data
+     });
+   }
+ }
 
+ renderItem = ({item, index}) => {
+  return(
+    <TouchableHighlight
+    style = {{
+      alignItems: 'center',
+      backgroundColor: '#DDDDDD',
+      padding: 10,
+      width: '90%'
+    }}
+    activeOpacity = {0.6}
+    underlayColor = "#DDDDDD"
+    onPress = {() => {
+      this.setState({
+        showFlatlist: false,
+        bookName: item.volumeInfo.title
+      })
+    }}
+    bottomDivider>
+      <Text>{item.volumeInfo.title}</Text>
+    </TouchableHighlight>
+  );
+ }
 
   render(){
 
@@ -217,20 +259,30 @@ updateBookRequestStatus=()=>{
       // Form screen
         <View style={{flex:1}}>
           <MyHeader title="Request Book" navigation ={this.props.navigation}/>
-
-          <ScrollView>
-            <KeyboardAvoidingView style={styles.keyBoardStyle}>
+            <View style={styles.keyBoardStyle}>
               <TextInput
                 style ={styles.formTextInput}
                 placeholder={"enter book name"}
                 onChangeText={(text)=>{
-                    this.setState({
-                        bookName:text
-                    })
+                    this.getBooksFromApi(text);
                 }}
                 value={this.state.bookName}
+                onClear = {(text) => {
+                  this.getBooksFromApi("");
+                }}
               />
-              <TextInput
+              {this.state.showFlatlist ? (
+                <FlatList 
+                data = {this.state.dataSource}
+                renderItem = {this.renderItem}
+                keyExtractor = {(item, index) => {
+                  index.toString();
+                }}
+                style = {{marginTop: 10}}
+                enableEmptySections = {true}/>
+              ) : (
+                <View>
+                <TextInput
                 style ={[styles.formTextInput,{height:300}]}
                 multiline
                 numberOfLines ={8}
@@ -249,10 +301,12 @@ updateBookRequestStatus=()=>{
                 >
                 <Text>Request</Text>
               </TouchableOpacity>
+              </View>
+              )}
 
-            </KeyboardAvoidingView>
-            </ScrollView>
-        </View>
+            </View>
+            </View>
+       
     )
   }
 }
